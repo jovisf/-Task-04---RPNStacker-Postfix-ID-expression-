@@ -1,0 +1,125 @@
+/* *******************************************************************
+ * Copyright (c) 2021 Universidade Federal de Pernambuco (UFPE).
+ * 
+ * This file is part of the Compilers course at UFPE.
+ * 
+ * During the 1970s and 1980s, Hewlett-Packard used RPN in all 
+ * of their desktop and hand-held calculators, and continued to 
+ * use it in some models into the 2020s. In computer science, 
+ * reverse Polish notation is used in stack-oriented programming languages 
+ * such as Forth, STOIC, PostScript, RPL and Joy.
+ *  
+ * Contributors: 
+ *     Henrique Rebelo      initial design and implementation 
+ *     http://www.cin.ufpe.br/~hemr/
+ * ******************************************************************/
+
+package postfix.parser;
+
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Stack;
+
+import postfix.ast.Expr;
+import postfix.ast.Expr.Id;
+import postfix.interpreter.Interpreter;
+import postfix.lexer.Token;
+import postfix.lexer.TokenType;
+
+/**
+ * @author Henrique Rebelo
+ */
+public class Parser {
+
+	private final List<Token> tokens;
+	private final Interpreter interpreter;
+	// The internal stack used for shift-reduce parsing
+	private Stack<Expr> stack = new Stack<>();
+	private int current = 0;
+
+	public Parser(List<Token> tokens, Interpreter interpreter) {
+		this.tokens = tokens;
+		this.interpreter = interpreter;
+	}
+
+	//Parsing Expressions 
+	public Expr parse() throws Exception {
+		try {
+			return expression();
+		} catch (java.util.EmptyStackException error) {
+			throw new ParserError("incomplete binop expression");
+		}
+	}
+
+	// -------------------------------------------------------------
+	// HELPERS METHODS
+	// -------------------------------------------------------------
+	private Expr expression() throws Exception {
+		while (!isAtEnd()) {
+			if(this.match(TokenType.NUM)) {
+				this.stack.push(this.number());
+			}
+			else if(this.match(TokenType.ID)) {
+				this.stack.push(this.id());
+			}
+			// matching any of the operation tokens
+			else if(this.match(TokenType.PLUS, TokenType.MINUS, 
+					TokenType.SLASH, TokenType.STAR)) {
+				this.stack.push(this.binop());
+			}
+			this.advance();
+		}
+		return this.stack.pop();
+	}
+
+	private Expr number() {
+		return new Expr.Number(peek().lexeme);
+	}
+	
+	private Expr id () throws Exception {
+		if(interpreter.env.containsKey(peek().lexeme)){
+			return new Expr.Id(interpreter.env.get(peek().lexeme));
+		}
+		else {
+			throw new Exception(peek().lexeme + " not exists on enviroment");
+		}
+	}
+
+
+	private Expr binop() {
+		return new Expr.Binop(this.stack.pop(), this.stack.pop(), this.peek());
+	}
+
+	private boolean match(TokenType... types) {
+		for (TokenType type : types) {
+			if (check(type)) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	private boolean check(TokenType type) {
+		if (isAtEnd()) return false;
+		return peek().type == type;
+	}
+
+	private Token advance() {
+		if (!isAtEnd()) current++;
+		return previous();
+	}
+
+	private boolean isAtEnd() {
+		return peek().type == TokenType.EOF;
+	}
+
+	private Token peek() {
+		return tokens.get(current);
+	}
+
+	private Token previous() {
+		return tokens.get(current - 1);
+	}
+}
